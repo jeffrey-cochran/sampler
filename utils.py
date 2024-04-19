@@ -2,6 +2,7 @@ from collections import namedtuple
 
 import ufl
 import numpy as np
+from constants import BoundaryFlag, DIM
 
 LameParams = namedtuple("LameParams", ["MU", "LAMBDA"])
 
@@ -16,9 +17,12 @@ def get_lame_params(
         )
     )
 
-def clamped_boundary(x):
-    return np.isclose(x[0], 0)
-
+def get_locator(boundary_flag:BoundaryFlag, point_on_boundary):
+    current_dim = DIM[boundary_flag]
+    return (
+        boundary_flag,
+        lambda x: np.isclose(x[current_dim], point_on_boundary[current_dim])
+    )
 def epsilon(u):
     return ufl.sym(ufl.grad(u))  # Equivalent to 0.5*(ufl.nabla_grad(u) + ufl.nabla_grad(u).T)
 

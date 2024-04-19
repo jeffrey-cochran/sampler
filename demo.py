@@ -19,6 +19,7 @@ domain = mesh.create_box(MPI.COMM_WORLD, [np.array([0, 0, 0]), np.array([L, W, W
                          [20, 6, 6], cell_type=mesh.CellType.hexahedron)
 V = fem.VectorFunctionSpace(domain, ("Lagrange", 1))
 
+print(type(domain))
 def clamped_boundary(x):
     return np.isclose(x[0], 0)
 
@@ -57,13 +58,14 @@ p = pyvista.Plotter(off_screen=True)
 topology, cell_types, geometry = plot.vtk_mesh(V)
 grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
 
+print(geometry.shape)
 # Attach vector values to grid and warp grid by vector
-grid["u"] = uh.x.array.reshape((geometry.shape[0], 3))
-actor_0 = p.add_mesh(grid, style="wireframe", color="k")
-warped = grid.warp_by_vector("u", factor=1.5)
-actor_1 = p.add_mesh(warped, show_edges=True)
-p.show_axes()
-p.screenshot("deflection.jpg")
+# grid["u"] = uh.x.array.reshape((geometry.shape[0], 3))
+# actor_0 = p.add_mesh(grid, style="wireframe", color="k")
+# warped = grid.warp_by_vector("u", factor=1.5)
+# actor_1 = p.add_mesh(warped, show_edges=True)
+# p.show_axes()
+# p.screenshot("deflection.jpg")
 # if not pyvista.OFF_SCREEN:
 #     p.show()
 # else:

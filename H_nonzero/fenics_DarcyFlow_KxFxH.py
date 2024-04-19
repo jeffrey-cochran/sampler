@@ -2,7 +2,7 @@
 # coding: utf-8
 
 #try:
-import dolfin
+# import dolfin
 #except ImportError:
 #    get_ipython().system('wget "https://fem-on-colab.github.io/releases/fenics-install.sh" -O "/tmp/fenics-install.sh" && bash "/tmp/fenics-install.sh"')
 #    import dolfin

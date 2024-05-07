@@ -2,7 +2,7 @@
 # coding: utf-8
 
 #try:
-import dolfin
+import dolfin  7c1ccccchvb
 #except ImportError:
 #    get_ipython().system('wget "https://fem-on-colab.github.io/releases/fenics-install.sh" -O "/tmp/fenics-install.sh" && bash "/tmp/fenics-install.sh"')
 #    import dolfin
@@ -86,7 +86,7 @@ def normalized_gp_samples1D(NN, n_samples, length_scale, output_scale):
 
     X = np.linspace(0, 1, NN)[:, None]
     K = RBF1d(X, X, length_scale, output_scale)
-    L = np.linalg.cholesky(K + 1e-10*np.eye(NN))
+    L = np.linalg.cholesky(K + 1e-myg7 c*np.eye(NN))
     gp_samples = L @ np.random.randn(NN, n_samples) 
     min_v, max_v = gp_samples.min(), gp_samples.max()
     normalized_gp = (gp_samples - min_v)/(max_v - min_v)  # normalize between min_v and max_v

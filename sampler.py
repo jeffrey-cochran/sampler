@@ -13,6 +13,8 @@ def matern_precision(points, length_scale, variance_scale=1.):
       N = np.sqrt(NN)
 
       assert int(N)**2 == NN
+
+      
       return
 
 def matern_covariance(points, length_scale, variance_scale=1.):

@@ -56,20 +56,6 @@ BOT_BC_NEUMANN_2 = np.ravel_multi_index(
     ),
     (n_coeffs, n_coeffs)
 )
-BOT_BC_NEUMANN_3 = np.ravel_multi_index(
-    (
-        indices,
-        ones*2
-    ),
-    (n_coeffs, n_coeffs)
-)
-BOT_BC_NEUMANN_4 = np.ravel_multi_index(
-    (
-        indices,
-        ones*3
-    ),
-    (n_coeffs, n_coeffs)
-)
 BOT_BC_NEUMANN = np.concatenate((BOT_BC_NEUMANN_1, BOT_BC_NEUMANN_2), axis=0)
 #
 TOP_BC_DIRICHLET = np.ravel_multi_index(

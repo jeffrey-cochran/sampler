@@ -16,10 +16,12 @@ from nutils import function, mesh
 
 average = np.zeros((11,11))
 cov = np.ones((121,121))
-a = np.sin
 
-neumann = NeumannBC(value=a)
-dirichlet = DirichletBC(value=a)
+def sin_bc(x):
+    return np.sin(2*np.pi*x)
+
+neumann = NeumannBC(value=sin_bc)
+dirichlet = DirichletBC(value=sin_bc)
 
 b = UnitSquareSampler(
     average=average,
@@ -31,7 +33,12 @@ b = UnitSquareSampler(
     bc_right=dirichlet
 )
 
-print(b.boundary_conditions.bot)
+print(
+    b.boundary_conditions.top,
+    b.boundary_conditions.bot,
+    b.boundary_conditions.left,
+    b.boundary_conditions.right
+)
 
 # import numpy as np
 

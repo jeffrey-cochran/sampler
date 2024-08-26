@@ -3,7 +3,7 @@
 import contextlib
 import io
 from functools import reduce
-from typing import Tuple, Union, Callable
+from typing import Optional, List, Tuple, Union
 from dataclasses import dataclass
 
 # 3rd Party
@@ -15,22 +15,75 @@ from nutils import mesh as nutils_mesh
 
 # Local
 from samplers.sampler_base import Sampler
-from utils.boundary_conditions import BoundaryCondition, NeumannBC, DirichletBC
-
+from utils.boundary_conditions import (
+    BoundaryConditions,
+    BoundaryCondition,
+    NeumannBC,
+    DirichletBC
+)
 
 # Type aliases
 NutilsFunctionArray = nutils_function.Array
 NutilsTopology = nutils_topology.Topology
 NDArray = np.ndarray
 SparseMatrix = sp.sparse.spmatrix
+ArrayPlaceHolder = Union[NDArray, bool, None]
 
 
-@dataclass
-class UnitSquareBoundaryConditions:
-    top:NDArray
-    bot:NDArray
-    left:NDArray
-    right:NDArray
+class UnitSquareBoundaryConditions(BoundaryConditions):
+
+    def __init__(
+        self, *,
+        top:Optional[BoundaryCondition],
+        bot:Optional[BoundaryCondition],
+        left:Optional[BoundaryCondition],
+        right:Optional[BoundaryCondition],
+        x_dim:int,
+        y_dim:int
+    ):
+        self.top = self.__init_boundary_condition(top, x_idx=np.arange(x_dim), y_idx=np.ones())
+        self.bot = self.__init_boundary_condition(bot)
+        self.left = self.__init_boundary_condition(left)
+        self.right = self.__init_boundary_condition(right)
+
+        for 
+
+    def __init_boundary_condition(self, boundary_condition:BoundaryCondition):
+
+        if boundary_condition is None:
+            return None
+        
+
+        
+
+    def __iter__(self):
+        return iter([self.top, self.bot, self.left, self.right])
+
+    def get_problem_corners(self, rtol:float = 1.e-5) -> List[str]:
+        # NOTE:
+        #   - bcs are the boundary conditions that overlap
+        #   - idx are the indices where boundary conditions overlap
+        #   - key describes the location where overlap occurs
+        bcs = [(self.left, self.top), (self.right, self.top), (self.left, self.bot), (self.right, self.bot)]
+        idx = [(-1, 0), (-1, -1), (0, 0), (0, -1)]
+        key = ["top-left", "top-right", "bot-left", "bot-right"]
+
+        problem_corners = []
+        for b, i, k in zip(bcs, idx, key):
+            # NOTE:
+            #   If either boundary condition is None, then 
+            #   a conflict is impossible. Otherise, check
+            #   that the overlapping values agree to within rtol
+            bcs_are_consistent = (
+                    b[0] is None
+                or  b[1] is None
+                or  np.isclose(b[0][i[0]], b[1][i[1]], rtol=rtol)
+            )
+            
+            if not bcs_are_consistent:
+                problem_corners.append(k)
+
+        return problem_corners
 
 
 class UnitSquareSampler(Sampler):
@@ -45,7 +98,8 @@ class UnitSquareSampler(Sampler):
         bc_top:BoundaryCondition = None,
         bc_bot:BoundaryCondition = None,
         bc_left:BoundaryCondition = None,
-        bc_right:BoundaryCondition = None
+        bc_right:BoundaryCondition = None,
+        rtol:float = 1.e-5
     ):
         """Initialize UnitSquareSampler
         
@@ -54,6 +108,8 @@ class UnitSquareSampler(Sampler):
         average (NDArray):
             An array of the average coefficient values at each knot. The dimensions
             of the knot vectors are determined by the size of this argument.
+        poly_order (int):
+            The polynomial order of the b-spline basis.
         cov_mat (SparseMatrix):
             The covariance matrix of the Gaussian Random Field. The function only
             accepts cov_mat XOR prec_mat. If the field has a known, sparse precision
@@ -75,6 +131,9 @@ class UnitSquareSampler(Sampler):
         bc_right (BoundaryCondition):
             The boundary condition to be enforced on the right of the unit square (x=1).
             If None, the value at the right boundary will be random.
+        rtol (float):
+            The relative tolerance with which boundary conditions are forced to be consistent
+            at the corners.
         """
 
         self.poly_order = poly_order
@@ -94,7 +153,8 @@ class UnitSquareSampler(Sampler):
             bc_bot=bc_bot,
             bc_left=bc_left,
             bc_right=bc_right,
-            poly_order=poly_order
+            poly_order=poly_order,
+            rtol=rtol
         )
         # self.sample = self.sample_gmrf if is_gmrf else self.sample_grf
 
@@ -105,7 +165,8 @@ class UnitSquareSampler(Sampler):
         bc_bot:BoundaryCondition,
         bc_left:BoundaryCondition,
         bc_right:BoundaryCondition,
-        poly_order:int
+        poly_order:int,
+        rtol:float
     ):
         """Sets the boundary conditions.
 
@@ -140,7 +201,14 @@ class UnitSquareSampler(Sampler):
                 left  = self.project_onto_boundary(boundary_condition=bc_left,  topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order),
                 right = self.project_onto_boundary(boundary_condition=bc_right, topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order)
             )
-        #
+        
+        problem_corners = out_bcs.get_problem_corners(rtol=rtol)
+        if problem_corners:
+            raise RuntimeError(
+                "The provided boundary conditions do not agree at the %s corner(s) "
+                "of the unit square. Aborting!" % ', '.join(problem_corners)
+            )
+
         return out_bcs
 
 
@@ -156,6 +224,10 @@ class UnitSquareSampler(Sampler):
 
 
     def __init_geom(self, poly_order:int) -> Tuple[NutilsTopology, NutilsFunctionArray]:
+        # NOTE:
+        #   The average values of the coefficients are provided; however, the
+        #   number of knots must be inferred dynamically based on this and the
+        #   degree of the spline basis.
         return nutils_mesh.rectilinear(
             [
                 np.linspace(0, 1, self.x_dim-poly_order+1),
@@ -190,22 +262,29 @@ class UnitSquareSampler(Sampler):
         basis:NutilsFunctionArray,
         geometry:NutilsFunctionArray,
         poly_order:int
-    ) -> NDArray:
+    ) -> BoundaryCondition:
         
         if boundary_condition is None:
             return None
 
-        func = boundary_condition.value
-
         # NOTE:
-        #   When a dirichlet condition is provided, we will force the value
-        #   to be consistent at the corners of the unit square
+        #   If the boundaries are Dirichlet, then we can only ensure
+        #   consistency of the values at the corners are 'exact'
         use_exact_boundaries = isinstance(boundary_condition, DirichletBC)
-        return topo.project(
-            func(geometry[0]),
-            onto=basis,
-            geometry=geometry,
-            ptype="lsqr",
-            degree=poly_order,
-            exact_boundaries=use_exact_boundaries
-        )
+
+        if func:= boundary_condition.func is not None:
+            boundary_condition.value = topo.project(
+                func(geometry[0]),
+                onto=basis,
+                geometry=geometry,
+                ptype="lsqr",
+                degree=poly_order,
+                exact_boundaries=use_exact_boundaries
+            )
+
+        if boundary_condition.value is None:
+            raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
+        elif boundary_condition.value.size != basis.size:
+            raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
+            
+        return boundary_condition

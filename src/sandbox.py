@@ -2,19 +2,36 @@ from samplers.unit_square import UnitSquareSampler
 from utils.boundary_conditions import NeumannBC, DirichletBC
 import numpy as np
 
+from nutils import function, mesh
+
+
+# topo, geom = mesh.rectilinear([np.linspace(0,1,9)])
+# basis = topo.basis('spline', degree=3)
+
+# exact = np.sin(geom[0])
+
+# projected = topo.project(exact, onto=basis, geometry=geom, ptype='lsqr', degree=3)
+
+# print(projected)
+
+average = np.zeros((11,11))
+cov = np.ones((121,121))
 a = np.sin
 
 neumann = NeumannBC(value=a)
 dirichlet = DirichletBC(value=a)
 
 b = UnitSquareSampler(
-    average=a,
-    cov_mat=a,
+    average=average,
+    poly_order=4,
+    cov_mat=cov,
     bc_top=dirichlet,
     bc_bot=dirichlet,
     bc_left=None,
     bc_right=dirichlet
 )
+
+print(b.boundary_conditions.bot)
 
 # import numpy as np
 

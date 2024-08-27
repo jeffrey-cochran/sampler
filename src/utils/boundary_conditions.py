@@ -28,11 +28,11 @@ class BoundaryCondition:
         the indices of the GRF at which the boundary condition values apply;
         note that indices[0].size must be equal to value.size
     """
-    func:Optional[BoundaryConditionFunction]
-    value:Optional[ArrayLike]
-    indices:Optional[Indices]
-    id:Optional[Hashable]
-        
+    func:Optional[BoundaryConditionFunction] = None
+    value:Optional[ArrayLike] = None
+    indices:Optional[Indices] = None
+    id:Optional[Hashable] = "no_id_provided"
+
 
 @dataclass
 class NeumannBC(BoundaryCondition):

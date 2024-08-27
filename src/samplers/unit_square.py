@@ -39,27 +39,74 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
         left:Optional[BoundaryCondition],
         right:Optional[BoundaryCondition],
         x_dim:int,
-        y_dim:int
+        y_dim:int,
+        consistency_rtol:float = 1.e-5
     ):
-        self.top = self.__init_boundary_condition(top, x_idx=np.arange(x_dim), y_idx=np.ones())
-        self.bot = self.__init_boundary_condition(bot)
-        self.left = self.__init_boundary_condition(left)
-        self.right = self.__init_boundary_condition(right)
 
-        for 
+        # Ravel the 2D indices to 1D global indices
+        # NOTE:
+        #   multi-index ravel does not seem to work with '-1', and
+        #   it is necessary to use N-1 to ravel the last index value.
+        self.bot   = self.__init_boundary_condition(bot,   x_idx=np.arange(x_dim),            y_idx=np.zeros((x_dim,)))
+        self.top   = self.__init_boundary_condition(top,   x_idx=np.arange(x_dim),            y_idx=np.ones((x_dim,))*(x_dim-1))
+        self.left  = self.__init_boundary_condition(left,  x_idx=np.zeros((y_dim,)),          y_idx=np.arange(y_dim))
+        self.right = self.__init_boundary_condition(right, x_idx=np.ones((y_dim,))*(y_dim-1), y_idx=np.arange(y_dim))
 
-    def __init_boundary_condition(self, boundary_condition:BoundaryCondition):
+        # Confirm that there are no inconsistent boundary conditions
+        self.problem_corners = self.__get_problem_corners(rtol=consistency_rtol)
+        if not self.are_consistent:
+            raise RuntimeError(
+                "The provided boundary conditions do not agree at the %s corner(s) "
+                "of the unit square. Aborting!" % ', '.join(self.problem_corners)
+            )
 
-        if boundary_condition is None:
-            return None
-        
+        self.values, self.indices = None, None
+        if self:
+            # Repeated indices correspond to corners, which are already required
+            # to be consistent, so we can remove them.
+            joint_idx = np.hstack([bc.indices for bc in self if bc is not None])
+            joint_value = np.hstack([bc.value for bc in self if bc is not None])
+            _, unique_idx = np.unique(joint_idx, return_index=True)
+            #
+            self.values = joint_value[unique_idx]
+            self.indices = joint_idx[unique_idx]
 
-        
+
+    def __bool__(self):
+        return reduce(
+            lambda has_bcs, bc: has_bcs or bc is not None,
+            self,
+            False
+        )
+
+
+    def __init_boundary_condition(
+            self,
+            boundary_condition:BoundaryCondition,
+            x_idx:NDArray,
+            y_idx:NDArray
+        ):
+
+        if boundary_condition is not None:
+            boundary_condition.indices = np.ravel_multi_index(
+                (
+                    x_idx.astype(int),
+                    y_idx.astype(int)
+                ),
+                (x_idx.size, y_idx.size)
+            )
+
+        return boundary_condition
+
 
     def __iter__(self):
         return iter([self.top, self.bot, self.left, self.right])
 
-    def get_problem_corners(self, rtol:float = 1.e-5) -> List[str]:
+    def __get_problem_corners(
+            self,
+            rtol:float = 1.e-5
+        ) -> List[str]:
+
         # NOTE:
         #   - bcs are the boundary conditions that overlap
         #   - idx are the indices where boundary conditions overlap
@@ -77,13 +124,19 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
             bcs_are_consistent = (
                     b[0] is None
                 or  b[1] is None
-                or  np.isclose(b[0][i[0]], b[1][i[1]], rtol=rtol)
+                or  np.isclose(b[0].value[i[0]], b[1].value[i[1]], rtol=rtol)
             )
             
             if not bcs_are_consistent:
                 problem_corners.append(k)
-
+        #
         return problem_corners
+
+
+    @property
+    def are_consistent(self):
+        return len(self.problem_corners) == 0
+
 
 
 class UnitSquareSampler(Sampler):
@@ -142,6 +195,7 @@ class UnitSquareSampler(Sampler):
         #   Only storing one matrix: self.mat is either covariance or precision. If
         #   the precision matrix is stored, self.is_gmrf == True 
         self.x_dim, self.y_dim = self.__init_dims(average_coeffs=average)
+        self.average = average.flatten()
         self.mat, self.is_gmrf = self.__init_mat(cov_mat=cov_mat, prec_mat=prec_mat)
 
         self.ns = nutils_function.Namespace()
@@ -156,6 +210,10 @@ class UnitSquareSampler(Sampler):
             poly_order=poly_order,
             rtol=rtol
         )
+
+        self.fixed_indices = self.boundary_conditions.indices
+        self.free_indices = np.setdiff1d(np.arange(self.x_dim*self.y_dim), self.fixed_indices)
+
         # self.sample = self.sample_gmrf if is_gmrf else self.sample_grf
 
 
@@ -195,19 +253,19 @@ class UnitSquareSampler(Sampler):
         # Capturing the projection solver output because I don't see
         # an argument for "silent" or "verbose", and I find it annoying.
         with contextlib.redirect_stdout(io.StringIO()) as _:
-            out_bcs = UnitSquareBoundaryConditions(
-                top   = self.project_onto_boundary(boundary_condition=bc_top,   topo=x_topo, basis=x_basis, geometry=x_geom, poly_order=poly_order),
-                bot   = self.project_onto_boundary(boundary_condition=bc_bot,   topo=x_topo, basis=x_basis, geometry=x_geom, poly_order=poly_order),
-                left  = self.project_onto_boundary(boundary_condition=bc_left,  topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order),
-                right = self.project_onto_boundary(boundary_condition=bc_right, topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order)
-            )
-        
-        problem_corners = out_bcs.get_problem_corners(rtol=rtol)
-        if problem_corners:
-            raise RuntimeError(
-                "The provided boundary conditions do not agree at the %s corner(s) "
-                "of the unit square. Aborting!" % ', '.join(problem_corners)
-            )
+                bc_top   = self.project_onto_boundary(boundary_condition=bc_top,   topo=x_topo, basis=x_basis, geometry=x_geom, poly_order=poly_order)
+                bc_bot   = self.project_onto_boundary(boundary_condition=bc_bot,   topo=x_topo, basis=x_basis, geometry=x_geom, poly_order=poly_order)
+                bc_left  = self.project_onto_boundary(boundary_condition=bc_left,  topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order)
+                bc_right = self.project_onto_boundary(boundary_condition=bc_right, topo=y_topo, basis=y_basis, geometry=y_geom, poly_order=poly_order)
+
+        out_bcs = UnitSquareBoundaryConditions(
+            top   = bc_top,
+            bot   = bc_bot,
+            left  = bc_left,
+            right = bc_right,
+            x_dim = len(x_basis),
+            y_dim = len(y_basis)
+        )
 
         return out_bcs
 
@@ -252,7 +310,22 @@ class UnitSquareSampler(Sampler):
             out_mat,
             is_gmrf
         )
-    
+
+
+    def __sample_gmrf(self, num_samples:int):
+
+        Laa = getattr(self, 'Laa', None)
+
+        if Laa is None:
+            Laa = 
+        except AttributeError:
+
+            Qaa = self.mat[self.free_indices, :][:, self.free_indices]
+            Qbb = self.mat[self.fixed_indices, :][:, self.fixed_indices]
+            Qab = self.mat[self.free_indices, :][:, self.fixed_indices]
+
+        return 0
+
 
     @classmethod
     def project_onto_boundary(
@@ -272,7 +345,7 @@ class UnitSquareSampler(Sampler):
         #   consistency of the values at the corners are 'exact'
         use_exact_boundaries = isinstance(boundary_condition, DirichletBC)
 
-        if func:= boundary_condition.func is not None:
+        if (func:= boundary_condition.func) is not None:
             boundary_condition.value = topo.project(
                 func(geometry[0]),
                 onto=basis,
@@ -282,9 +355,11 @@ class UnitSquareSampler(Sampler):
                 exact_boundaries=use_exact_boundaries
             )
 
-        if boundary_condition.value is None:
-            raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
-        elif boundary_condition.value.size != basis.size:
-            raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
+        print("HELLO")
+
+        # if boundary_condition.value is None:
+        #     raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
+        # elif boundary_condition.value.size != basis.size:
+        #     raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
             
         return boundary_condition

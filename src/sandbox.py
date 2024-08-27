@@ -20,25 +20,35 @@ cov = np.ones((121,121))
 def sin_bc(x):
     return np.sin(2*np.pi*x)
 
-neumann = NeumannBC(value=sin_bc)
-dirichlet = DirichletBC(value=sin_bc)
+def cos_bc(x):
+    return np.cos(2*np.pi*x)
+
+# NOTE:
+#   Neumann conditions are currently unsupported
+neumann = NeumannBC(func=sin_bc, id="neumann")
+
+# NOTE:
+#   If you want you reuse the same boundary condition,
+#   you'll either need to do a deep copy or just create
+#   multiple instances; otherwise, the computed indices
+#   will be overwritten each time the referenced BC is
+#   evaluated.
+dirichlet_1 = DirichletBC(func=sin_bc, id="dirichlet1")
+dirichlet_2 = DirichletBC(func=sin_bc, id="dirichlet2")
+dirichlet_3 = DirichletBC(func=sin_bc, id="dirichlet3")
 
 b = UnitSquareSampler(
     average=average,
     poly_order=4,
     cov_mat=cov,
-    bc_top=dirichlet,
-    bc_bot=dirichlet,
+    bc_top=dirichlet_1,
+    bc_bot=None,
     bc_left=None,
-    bc_right=dirichlet
+    bc_right=None
 )
 
-print(
-    b.boundary_conditions.top,
-    b.boundary_conditions.bot,
-    b.boundary_conditions.left,
-    b.boundary_conditions.right
-)
+if b.boundary_conditions:
+    print(b.boundary_conditions.values, b.boundary_conditions.indices)
 
 # import numpy as np
 

@@ -12,6 +12,9 @@ import scipy as sp
 from nutils import topology as nutils_topology
 from nutils import function as nutils_function
 from nutils import mesh as nutils_mesh
+import matplotlib.tri as tri
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 # Local
 from samplers.sampler_base import Sampler
@@ -21,6 +24,7 @@ from utils.boundary_conditions import (
     NeumannBC,
     DirichletBC
 )
+from utils.sparse_chol import chol
 
 # Type aliases
 NutilsFunctionArray = nutils_function.Array
@@ -43,14 +47,16 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
         consistency_rtol:float = 1.e-5
     ):
 
+        self.field_shape = (x_dim, y_dim)
+
         # Ravel the 2D indices to 1D global indices
         # NOTE:
         #   multi-index ravel does not seem to work with '-1', and
         #   it is necessary to use N-1 to ravel the last index value.
         self.bot   = self.__init_boundary_condition(bot,   x_idx=np.arange(x_dim),            y_idx=np.zeros((x_dim,)))
-        self.top   = self.__init_boundary_condition(top,   x_idx=np.arange(x_dim),            y_idx=np.ones((x_dim,))*(x_dim-1))
+        self.top   = self.__init_boundary_condition(top,   x_idx=np.arange(x_dim),            y_idx=np.ones((x_dim,))*(y_dim-1))
         self.left  = self.__init_boundary_condition(left,  x_idx=np.zeros((y_dim,)),          y_idx=np.arange(y_dim))
-        self.right = self.__init_boundary_condition(right, x_idx=np.ones((y_dim,))*(y_dim-1), y_idx=np.arange(y_dim))
+        self.right = self.__init_boundary_condition(right, x_idx=np.ones((y_dim,))*(x_dim-1), y_idx=np.arange(y_dim))
 
         # Confirm that there are no inconsistent boundary conditions
         self.problem_corners = self.__get_problem_corners(rtol=consistency_rtol)
@@ -93,7 +99,7 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
                     x_idx.astype(int),
                     y_idx.astype(int)
                 ),
-                (x_idx.size, y_idx.size)
+                self.field_shape
             )
 
         return boundary_condition
@@ -101,6 +107,7 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
 
     def __iter__(self):
         return iter([self.top, self.bot, self.left, self.right])
+
 
     def __get_problem_corners(
             self,
@@ -138,7 +145,6 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
         return len(self.problem_corners) == 0
 
 
-
 class UnitSquareSampler(Sampler):
 
 
@@ -163,7 +169,7 @@ class UnitSquareSampler(Sampler):
             of the knot vectors are determined by the size of this argument.
         poly_order (int):
             The polynomial order of the b-spline basis.
-        cov_mat (SparseMatrix):
+        cov_mat (NDArray):
             The covariance matrix of the Gaussian Random Field. The function only
             accepts cov_mat XOR prec_mat. If the field has a known, sparse precision
             matrix, then sampling may be faster using the precision matrix.
@@ -214,7 +220,7 @@ class UnitSquareSampler(Sampler):
         self.fixed_indices = self.boundary_conditions.indices
         self.free_indices = np.setdiff1d(np.arange(self.x_dim*self.y_dim), self.fixed_indices)
 
-        # self.sample = self.sample_gmrf if is_gmrf else self.sample_grf
+        self.sample = self.__sample_gmrf if self.is_gmrf else self.__sample_grf
 
 
     def __init_boundary_conditions(
@@ -296,7 +302,7 @@ class UnitSquareSampler(Sampler):
 
     def __init_mat(self, cov_mat:NDArray, prec_mat:SparseMatrix) -> Tuple[Union[NDArray, SparseMatrix], bool]:
         is_gmrf = cov_mat is None
-        if is_gmrf == prec_mat is None:
+        if is_gmrf == (prec_mat is None):
             raise RuntimeError("Must provide exactly one of prec_mat XOR cov_mat. Aborting!")
         
         out_mat = prec_mat if is_gmrf else cov_mat
@@ -314,17 +320,93 @@ class UnitSquareSampler(Sampler):
 
     def __sample_gmrf(self, num_samples:int):
 
-        Laa = getattr(self, 'Laa', None)
+        L_aa = getattr(self, 'L_aa', None)
 
-        if Laa is None:
-            Laa = 
-        except AttributeError:
+        if L_aa is None:
+            # NOTE:
+            #   In general, the indices of block `a` are free,
+            #   and the indices of block `b` are fixed at the 
+            #   assumed boundary conditions.
+            self.mu_a = self.average[self.free_indices]
+            #
+            self.Q_aa = self.mat[self.free_indices, :][:, self.free_indices]
+            #
+            self.G_aa, self.P_aa = chol(self.Q_aa)
+            self.L_aa = self.P_aa.T @ self.G_aa
+            #
+            # NOTE: If there are no boundary conditions, then
+            # the conditional mean is just the mean.
+            self.mu_cond = self.mu_a
+            if self.boundary_conditions:
+                self.mu_b = self.average[self.fixed_indices]
+                self.Q_ab = self.mat[self.free_indices, :][:, self.fixed_indices]
+                # NOTE:
+                #   This is the conditional beta for the canonical GMRF
+                #   x_a - (mu_a | x_b) ~ Nc(beta_cond, Q_aa)
+                beta_cond = self.Q_ab @ (self.mu_b - self.boundary_conditions.values)
+                w = sp.sparse.linalg.spsolve(self.L_aa, beta_cond)
+                self.mu_cond = sp.sparse.linalg.spsolve(self.L_aa.T, w)
 
-            Qaa = self.mat[self.free_indices, :][:, self.free_indices]
-            Qbb = self.mat[self.fixed_indices, :][:, self.fixed_indices]
-            Qab = self.mat[self.free_indices, :][:, self.fixed_indices]
+        z = np.random.standard_normal((num_samples, self.free_indices.size))
+        v = sp.sparse.linalg.spsolve(self.L_aa.T, z.T).T
 
-        return 0
+        out_samples = np.empty((num_samples, self.x_dim*self.y_dim))
+        out_samples[:, self.free_indices] = self.mu_cond + v
+
+        # If there are boundary conditions, apply them
+        if self.boundary_conditions:
+            out_samples[:, self.fixed_indices] = self.boundary_conditions.values
+
+        return out_samples
+
+
+    def __sample_grf(self, num_samples:int):
+
+        L_cond = getattr(self, 'L_cond', None)
+
+        if L_cond is None:
+            # NOTE:
+            #   In general, the indices of block `a` are free,
+            #   and the indices of block `b` are fixed at the 
+            #   assumed boundary conditions.
+            self.mu_a = self.average[self.free_indices]
+            #
+            # Blocks of the covariance matrix, Gamma = [Gamma_aa, Gamma_ab; Gamma_ab.T, Gamma_bb]
+            self.Gamma_aa = self.mat[self.free_indices, :][:, self.free_indices]
+            #
+            # NOTE: If there are no boundary conditions, then
+            # the conditional mean is just the mean, and the
+            # conditional covariance is just the covariance.
+            self.mu_cond = self.mu_a
+            self.Gamma_cond = self.Gamma_aa
+            if self.boundary_conditions:
+                # 
+                # Compute the conditional covariance
+                self.mu_b = self.average[self.fixed_indices]
+                self.Gamma_ab = self.mat[self.free_indices, :][:, self.fixed_indices]
+                self.Gamma_bb = self.mat[self.fixed_indices, :][:, self.fixed_indices]
+                #
+                tmp_Gamma = np.linalg.solve(self.Gamma_bb, self.Gamma_ab.T)
+                self.Gamma_cond = self.Gamma_aa - self.Gamma_ab @ tmp_Gamma
+                #
+                # Compute the conditional mean
+                tmp_mu = np.linalg.solve(self.Gamma_bb, (self.boundary_conditions.values - self.mu_b))
+                self.mu_cond = self.mu_a + self.Gamma_ab @ tmp_mu
+            #
+            # Get the Cholesky decomposition of the conditional covariance
+            self.L_cond = np.linalg.cholesky(self.Gamma_cond)
+
+        z = np.random.standard_normal((num_samples, self.free_indices.size))
+        v = (self.L_cond.T @ z.T).T
+
+        out_samples = np.empty((num_samples, self.x_dim*self.y_dim))
+        out_samples[:, self.free_indices] = self.mu_cond + v
+
+        # If there are boundary conditions, apply them
+        if self.boundary_conditions:
+            out_samples[:, self.fixed_indices] = self.boundary_conditions.values
+
+        return out_samples
 
 
     @classmethod
@@ -342,7 +424,7 @@ class UnitSquareSampler(Sampler):
 
         # NOTE:
         #   If the boundaries are Dirichlet, then we can only ensure
-        #   consistency of the values at the corners are 'exact'
+        #   consistency if the values at the corners are 'exact'
         use_exact_boundaries = isinstance(boundary_condition, DirichletBC)
 
         if (func:= boundary_condition.func) is not None:
@@ -355,11 +437,41 @@ class UnitSquareSampler(Sampler):
                 exact_boundaries=use_exact_boundaries
             )
 
-        print("HELLO")
-
         # if boundary_condition.value is None:
         #     raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
         # elif boundary_condition.value.size != basis.size:
         #     raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
-            
+
         return boundary_condition
+
+
+    def visualize_sample(self, sample:NDArray=None, degree=9, title='Func Value') -> None:
+
+        viz_sampler = self.topo.sample('bezier', degree)
+
+        sample = sample if sample is not None else self.sample(1).flatten()
+        self.ns.f = np.dot(self.ns.basis, sample)
+
+        x, f = viz_sampler.eval(['xy_i', 'f'] @ self.ns)
+
+        f /= (1.1*np.abs(f).max())
+
+        triangulation = tri.Triangulation(x[:,0], x[:,1], viz_sampler.tri)
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+
+        levels = np.arange(-1., 1., 0.05)
+
+        ax1.set_title(title, fontsize=40)
+        ax1.triplot(triangulation, lw=0.5, color='white')
+        contour = ax1.tricontourf(triangulation, f.flatten(), levels=levels, cmap='bwr')
+
+        fig.subplots_adjust(right=0.8)
+        cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+        fig.colorbar(contour, cax=cbar_ax)
+        
+        mng = plt.get_current_fig_manager()
+        mng.resize(*mng.window.maxsize())
+
+        plt.show()

@@ -1,75 +1,95 @@
+# Standard
+# N/A
+
+# 3rd Party
+import numpy as np
+import scipy as sp
+
+# Local
 from samplers.unit_square import UnitSquareSampler
 from utils.boundary_conditions import NeumannBC, DirichletBC
-import numpy as np
+from utils.kernels import whittle_matern_precision, whittle_matern_covariance
 
-from nutils import function, mesh
+# NOTE:
+#   - The average is expected to be a 2D array of shape (num_bases_x, num_bases_y)
+#   - You can provide either a precision matrix (`prec_mat=...`)
+#     or a covariance matrix (`cov_mat=...`), but not both
+#   - The `whittle_matern_covariance` function assumes a smoothness parameter of 2.5
+#     (this isn't arbitrary, but a special case for which the kernel is simple)
+num_bases_x = 7
+num_bases_y = 7
+average = np.zeros((num_bases_x, num_bases_y))
+cov = whittle_matern_covariance(num_bases_x, 0.3)
 
+# NOTE:
+#   - The precision matrix is expected to be a 2D array of shape
+#     (num_bases_x*num_bases_y, num_bases_x*num_bases_y)
+#   - The Whittle-Matern precision matrix is only valid for uniform grids.
+#   - The `whittle_matern_precision` function assumes a smoothness parameter of 2.0
+#     (this isn't arbitrary, but a special case for which the precision can be
+#     computed in closed form and the resulting precision matrix is very sparse)
+# prec = whittle_matern_precision(num_bases_x, 1.)
 
-# topo, geom = mesh.rectilinear([np.linspace(0,1,9)])
-# basis = topo.basis('spline', degree=3)
-
-# exact = np.sin(geom[0])
-
-# projected = topo.project(exact, onto=basis, geometry=geom, ptype='lsqr', degree=3)
-
-# print(projected)
-
-average = np.zeros((11,11))
-cov = np.ones((121,121))
-
+# Example boundary condition functions
+# NOTE:
+#   Since the boundary conditions are applied to the
+#   edges of the unit-square, they only take 1D args
+#   (i.e. x or y) corresponding to which ever variable
+#   is free on that boundary.
 def sin_bc(x):
     return np.sin(2*np.pi*x)
 
-def cos_bc(x):
-    return np.cos(2*np.pi*x)
+def constant(in_constant=0.):
+    def f(x):
+        return in_constant
+    return f
+
+def linear(in_slope=1., in_intercept=0.):
+    def f(x):
+        return in_slope*x + in_intercept
+    return f
+
+def zero(x):
+    return 0.
 
 # NOTE:
-#   Neumann conditions are currently unsupported
-neumann = NeumannBC(func=sin_bc, id="neumann")
+#   Neumann conditions are currently unsupported,
+#   but they should be up and running soon. I'll
+#   add in linear constraints at the same time.
+not_supported = NeumannBC(func=sin_bc, id="neumann")
 
 # NOTE:
 #   If you want you reuse the same boundary condition,
-#   you'll either need to do a deep copy or just create
-#   multiple instances; otherwise, the computed indices
-#   will be overwritten each time the referenced BC is
-#   evaluated.
-dirichlet_1 = DirichletBC(func=sin_bc, id="dirichlet1")
-dirichlet_2 = DirichletBC(func=sin_bc, id="dirichlet2")
-dirichlet_3 = DirichletBC(func=sin_bc, id="dirichlet3")
-
-b = UnitSquareSampler(
+#   you'll either need multiple instances; otherwise,
+#   the computed indices will be overwritten each time
+#   the referenced BC is evaluated.
+tmp_sampler = UnitSquareSampler(
     average=average,
-    poly_order=4,
     cov_mat=cov,
-    bc_top=dirichlet_1,
-    bc_bot=None,
+    #prec_mat=prec,
+    poly_order=4,
+    bc_top=DirichletBC(func=constant(-1.)),
+    bc_bot=DirichletBC(func=constant(1.)),
     bc_left=None,
-    bc_right=None
+    bc_right=None,
 )
 
-if b.boundary_conditions:
-    print(b.boundary_conditions.values, b.boundary_conditions.indices)
+# To sample, just call `MySampler.sample(num_samples)`
+# NOTE:
+#   The matrix factorization is triggered by the first
+#   call to `sample`. Subsequent calls will not recompute
+#   the factorization.
+ten_thousand_samples = tmp_sampler.sample(10000)
 
-# import numpy as np
-
-# import elastic_simulator
-# import visualize
-# import domain
-
-# D = domain.Domain(
-#     length=10.,
-#     width=1.,
-#     discretization_shape=(20,6,6)
-# )
-
-# ES = elastic_simulator.ElasticSimulator(domain=D, poly_order=1)
-
-# uh = ES.simulate(elastic_modulus=100000, poissons_ratio=0.3, density=1.)
-# u = np.reshape(uh.x.array, D.shape + (3,))
-# visualize.visualize_deformation(
-#     domain=D,
-#     displacements=uh,
-#     function_space=ES.function_space,
-#     file_name="displacement",
-#     exaggeration_factor=1.
-# )
+# To confirm your samples look correct,
+# you can call `.visualize_sample()` to plot a random
+# sample, or `.visualize_sample(some_sample)`
+# to visualize a specific example. You can specify 
+# `degree=bigger_int` to increase refinement. The default
+# degree is 9.
+# NOTE:
+#   For the purpose of visualization, the field values are
+#   normalized to fall within the range [-1, 1].
+tmp_sampler.visualize_sample(title="Random Sample")
+tmp_sampler.visualize_sample(ten_thousand_samples[777], title="Sample 777")
+tmp_sampler.visualize_sample(ten_thousand_samples[777], degree=30, title="Sample 777 (Refined)")

@@ -1,15 +1,14 @@
 
 # Standard
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Hashable
+from typing import Optional, Hashable
 from abc import ABC
 
 # 3rd Party
 from numpy.typing import ArrayLike
 
-# Type Aliases
-BoundaryConditionFunction = Callable[[ArrayLike], ArrayLike]
-Indices = Tuple[ArrayLike, ...]
+# Local
+from sampler.utils.type_aliases import BoundaryConditionFunction, NDArray, Indices
 
 
 @dataclass
@@ -46,6 +45,14 @@ class DirichletBC(BoundaryCondition):
 
 class BoundaryConditions(ABC):
     """Abstract container for holding boundary conditions"""
+
+    @property
+    def values(self) -> NDArray:
+        """Returns the values corresponding to self.indices"""
+
+    @property
+    def indices(self) -> NDArray:
+        """Returns the indices of the boundary conditions"""
 
     @property
     def are_consistent(self) -> bool:

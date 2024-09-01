@@ -3,146 +3,34 @@
 import contextlib
 import io
 from functools import reduce
-from typing import Optional, List, Tuple, Union
-from dataclasses import dataclass
+from typing import Tuple, Union
 
 # 3rd Party
 import numpy as np
-import scipy as sp
-from nutils import topology as nutils_topology
 from nutils import function as nutils_function
 from nutils import mesh as nutils_mesh
 import matplotlib.tri as tri
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 
 # Local
-from samplers.sampler_base import Sampler
-from utils.boundary_conditions import (
-    BoundaryConditions,
+from sampler.boundary_conditions.base import (
     BoundaryCondition,
     NeumannBC,
     DirichletBC
 )
-from utils.sparse_chol import chol
-
-# Type aliases
-NutilsFunctionArray = nutils_function.Array
-NutilsTopology = nutils_topology.Topology
-NDArray = np.ndarray
-SparseMatrix = sp.sparse.spmatrix
-ArrayPlaceHolder = Union[NDArray, bool, None]
-
-
-class UnitSquareBoundaryConditions(BoundaryConditions):
-
-    def __init__(
-        self, *,
-        top:Optional[BoundaryCondition],
-        bot:Optional[BoundaryCondition],
-        left:Optional[BoundaryCondition],
-        right:Optional[BoundaryCondition],
-        x_dim:int,
-        y_dim:int,
-        consistency_rtol:float = 1.e-5
-    ):
-
-        self.field_shape = (x_dim, y_dim)
-
-        # Ravel the 2D indices to 1D global indices
-        # NOTE:
-        #   multi-index ravel does not seem to work with '-1', and
-        #   it is necessary to use N-1 to ravel the last index value.
-        self.bot   = self.__init_boundary_condition(bot,   x_idx=np.arange(x_dim),            y_idx=np.zeros((x_dim,)))
-        self.top   = self.__init_boundary_condition(top,   x_idx=np.arange(x_dim),            y_idx=np.ones((x_dim,))*(y_dim-1))
-        self.left  = self.__init_boundary_condition(left,  x_idx=np.zeros((y_dim,)),          y_idx=np.arange(y_dim))
-        self.right = self.__init_boundary_condition(right, x_idx=np.ones((y_dim,))*(x_dim-1), y_idx=np.arange(y_dim))
-
-        # Confirm that there are no inconsistent boundary conditions
-        self.problem_corners = self.__get_problem_corners(rtol=consistency_rtol)
-        if not self.are_consistent:
-            raise RuntimeError(
-                "The provided boundary conditions do not agree at the %s corner(s) "
-                "of the unit square. Aborting!" % ', '.join(self.problem_corners)
-            )
-
-        self.values, self.indices = None, None
-        if self:
-            # Repeated indices correspond to corners, which are already required
-            # to be consistent, so we can remove them.
-            joint_idx = np.hstack([bc.indices for bc in self if bc is not None])
-            joint_value = np.hstack([bc.value for bc in self if bc is not None])
-            _, unique_idx = np.unique(joint_idx, return_index=True)
-            #
-            self.values = joint_value[unique_idx]
-            self.indices = joint_idx[unique_idx]
-
-
-    def __bool__(self):
-        return reduce(
-            lambda has_bcs, bc: has_bcs or bc is not None,
-            self,
-            False
-        )
-
-
-    def __init_boundary_condition(
-            self,
-            boundary_condition:BoundaryCondition,
-            x_idx:NDArray,
-            y_idx:NDArray
-        ):
-
-        if boundary_condition is not None:
-            boundary_condition.indices = np.ravel_multi_index(
-                (
-                    x_idx.astype(int),
-                    y_idx.astype(int)
-                ),
-                self.field_shape
-            )
-
-        return boundary_condition
-
-
-    def __iter__(self):
-        return iter([self.top, self.bot, self.left, self.right])
-
-
-    def __get_problem_corners(
-            self,
-            rtol:float = 1.e-5
-        ) -> List[str]:
-
-        # NOTE:
-        #   - bcs are the boundary conditions that overlap
-        #   - idx are the indices where boundary conditions overlap
-        #   - key describes the location where overlap occurs
-        bcs = [(self.left, self.top), (self.right, self.top), (self.left, self.bot), (self.right, self.bot)]
-        idx = [(-1, 0), (-1, -1), (0, 0), (0, -1)]
-        key = ["top-left", "top-right", "bot-left", "bot-right"]
-
-        problem_corners = []
-        for b, i, k in zip(bcs, idx, key):
-            # NOTE:
-            #   If either boundary condition is None, then 
-            #   a conflict is impossible. Otherise, check
-            #   that the overlapping values agree to within rtol
-            bcs_are_consistent = (
-                    b[0] is None
-                or  b[1] is None
-                or  np.isclose(b[0].value[i[0]], b[1].value[i[1]], rtol=rtol)
-            )
-            
-            if not bcs_are_consistent:
-                problem_corners.append(k)
-        #
-        return problem_corners
-
-
-    @property
-    def are_consistent(self):
-        return len(self.problem_corners) == 0
+from sampler.boundary_conditions.unit_square import UnitSquareBoundaryConditions
+from sampler.sampler_base import (
+    __Sampler__,
+    Sampler,
+    GMRFSampler,
+    GRFSampler
+)
+from sampler.utils.type_aliases import (
+    NDArray,
+    SparseMatrix,
+    NutilsFunctionArray,
+    NutilsTopology
+)
 
 
 class UnitSquareSampler(Sampler):
@@ -220,7 +108,7 @@ class UnitSquareSampler(Sampler):
         self.fixed_indices = self.boundary_conditions.indices
         self.free_indices = np.setdiff1d(np.arange(self.x_dim*self.y_dim), self.fixed_indices)
 
-        self.sample = self.__sample_gmrf if self.is_gmrf else self.__sample_grf
+        self.sample = self.__init_sampler()
 
 
     def __init_boundary_conditions(
@@ -270,7 +158,8 @@ class UnitSquareSampler(Sampler):
             left  = bc_left,
             right = bc_right,
             x_dim = len(x_basis),
-            y_dim = len(y_basis)
+            y_dim = len(y_basis),
+            consistency_rtol=rtol
         )
 
         return out_bcs
@@ -283,7 +172,7 @@ class UnitSquareSampler(Sampler):
     def __init_dims(self, average_coeffs:NDArray) -> Tuple[int,int]:
         if len(average_coeffs.shape) != 2:
             raise RuntimeError("The array of average coefficients must be 2D. Aborting!")
-    
+
         return average_coeffs.shape
 
 
@@ -318,95 +207,29 @@ class UnitSquareSampler(Sampler):
         )
 
 
-    def __sample_gmrf(self, num_samples:int):
+    def __init_sampler(
+        self, *,
+        is_gmrf:bool,
+        average:NDArray,
+        mat:Union[NDArray, SparseMatrix],
+        boundary_conditions:UnitSquareBoundaryConditions
+    ) -> __Sampler__:
 
-        L_aa = getattr(self, 'L_aa', None)
+        out_sampler:__Sampler__ = None
+        if is_gmrf:
+            out_sampler = GMRFSampler(
+                average=average,
+                prec_mat=mat,
+                boundary_conditions=boundary_conditions
+            )
+        else:
+            out_sampler = GRFSampler(
+                average=average,
+                cov_mat=mat,
+                boundary_conditions=boundary_conditions
+            )
 
-        if L_aa is None:
-            # NOTE:
-            #   In general, the indices of block `a` are free,
-            #   and the indices of block `b` are fixed at the 
-            #   assumed boundary conditions.
-            self.mu_a = self.average[self.free_indices]
-            #
-            self.Q_aa = self.mat[self.free_indices, :][:, self.free_indices]
-            #
-            self.G_aa, self.P_aa = chol(self.Q_aa)
-            self.L_aa = self.P_aa.T @ self.G_aa
-            #
-            # NOTE: If there are no boundary conditions, then
-            # the conditional mean is just the mean.
-            self.mu_cond = self.mu_a
-            if self.boundary_conditions:
-                self.mu_b = self.average[self.fixed_indices]
-                self.Q_ab = self.mat[self.free_indices, :][:, self.fixed_indices]
-                # NOTE:
-                #   This is the conditional beta for the canonical GMRF
-                #   x_a - (mu_a | x_b) ~ Nc(beta_cond, Q_aa)
-                beta_cond = self.Q_ab @ (self.mu_b - self.boundary_conditions.values)
-                w = sp.sparse.linalg.spsolve(self.L_aa, beta_cond)
-                self.mu_cond = sp.sparse.linalg.spsolve(self.L_aa.T, w)
-
-        z = np.random.standard_normal((num_samples, self.free_indices.size))
-        v = sp.sparse.linalg.spsolve(self.L_aa.T, z.T).T
-
-        out_samples = np.empty((num_samples, self.x_dim*self.y_dim))
-        out_samples[:, self.free_indices] = self.mu_cond + v
-
-        # If there are boundary conditions, apply them
-        if self.boundary_conditions:
-            out_samples[:, self.fixed_indices] = self.boundary_conditions.values
-
-        return out_samples
-
-
-    def __sample_grf(self, num_samples:int):
-
-        L_cond = getattr(self, 'L_cond', None)
-
-        if L_cond is None:
-            # NOTE:
-            #   In general, the indices of block `a` are free,
-            #   and the indices of block `b` are fixed at the 
-            #   assumed boundary conditions.
-            self.mu_a = self.average[self.free_indices]
-            #
-            # Blocks of the covariance matrix, Gamma = [Gamma_aa, Gamma_ab; Gamma_ab.T, Gamma_bb]
-            self.Gamma_aa = self.mat[self.free_indices, :][:, self.free_indices]
-            #
-            # NOTE: If there are no boundary conditions, then
-            # the conditional mean is just the mean, and the
-            # conditional covariance is just the covariance.
-            self.mu_cond = self.mu_a
-            self.Gamma_cond = self.Gamma_aa
-            if self.boundary_conditions:
-                # 
-                # Compute the conditional covariance
-                self.mu_b = self.average[self.fixed_indices]
-                self.Gamma_ab = self.mat[self.free_indices, :][:, self.fixed_indices]
-                self.Gamma_bb = self.mat[self.fixed_indices, :][:, self.fixed_indices]
-                #
-                tmp_Gamma = np.linalg.solve(self.Gamma_bb, self.Gamma_ab.T)
-                self.Gamma_cond = self.Gamma_aa - self.Gamma_ab @ tmp_Gamma
-                #
-                # Compute the conditional mean
-                tmp_mu = np.linalg.solve(self.Gamma_bb, (self.boundary_conditions.values - self.mu_b))
-                self.mu_cond = self.mu_a + self.Gamma_ab @ tmp_mu
-            #
-            # Get the Cholesky decomposition of the conditional covariance
-            self.L_cond = np.linalg.cholesky(self.Gamma_cond)
-
-        z = np.random.standard_normal((num_samples, self.free_indices.size))
-        v = (self.L_cond.T @ z.T).T
-
-        out_samples = np.empty((num_samples, self.x_dim*self.y_dim))
-        out_samples[:, self.free_indices] = self.mu_cond + v
-
-        # If there are boundary conditions, apply them
-        if self.boundary_conditions:
-            out_samples[:, self.fixed_indices] = self.boundary_conditions.values
-
-        return out_samples
+        return out_sampler
 
 
     @classmethod
@@ -437,10 +260,10 @@ class UnitSquareSampler(Sampler):
                 exact_boundaries=use_exact_boundaries
             )
 
-        # if boundary_condition.value is None:
-        #     raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
-        # elif boundary_condition.value.size != basis.size:
-        #     raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
+        if boundary_condition.value is None:
+            raise RuntimeError("BoundaryCondition[%s] has neither function nor value. Aborting!" % str(boundary_condition.id))
+        elif boundary_condition.value.size != basis.size:
+            raise RuntimeError("BoundaryCondition[%s].value.size does not match basis.size. Aborting!" % str(boundary_condition.id))
 
         return boundary_condition
 

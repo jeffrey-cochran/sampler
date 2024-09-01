@@ -6,9 +6,11 @@ from typing import Tuple
 import scipy as sp
 import numpy as np
 
-# Type aliases
-SparseMatrix = sp.sparse.spmatrix
-NDArray = np.ndarray
+# Local
+from sampler.utils.type_aliases import (
+    SparseMatrix,
+    NDArray
+)
 
 def chol(A:SparseMatrix) -> Tuple[SparseMatrix, NDArray]:
     """Cholesky decomposition of a sparse matrix A.

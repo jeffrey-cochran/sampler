@@ -108,7 +108,12 @@ class UnitSquareSampler(Sampler):
         self.fixed_indices = self.boundary_conditions.indices
         self.free_indices = np.setdiff1d(np.arange(self.x_dim*self.y_dim), self.fixed_indices)
 
-        self.sample = self.__init_sampler()
+        self.sample = self.__init_sampler(
+            is_gmrf=self.is_gmrf,
+            average=self.average,
+            mat=self.mat,
+            boundary_conditions=self.boundary_conditions
+        )
 
 
     def __init_boundary_conditions(

@@ -49,7 +49,7 @@ class UnitSquareBoundaryConditions(BoundaryConditions):
                 "of the unit square. Aborting!" % ', '.join(self.problem_corners)
             )
 
-        self.values, self.indices = None, None
+        self.__values, self.__indices = None, None
         if self:
             # Repeated indices correspond to corners, which are already required
             # to be consistent, so we can remove them.

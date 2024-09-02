@@ -6,9 +6,9 @@ import numpy as np
 import scipy as sp
 
 # Local
-from samplers.unit_square import UnitSquareSampler
-from utils.boundary_conditions import NeumannBC, DirichletBC
-from utils.kernels import whittle_matern_precision, whittle_matern_covariance
+from sampler.unit_square import UnitSquareSampler
+from sampler.boundary_conditions.base import NeumannBC, DirichletBC
+from sampler.utils.kernels import whittle_matern_precision, whittle_matern_covariance
 
 # NOTE:
 #   - The average is expected to be a 2D array of shape (num_bases_x, num_bases_y)

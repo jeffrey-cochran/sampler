@@ -1,5 +1,6 @@
 
 # Standard
+from typing import Optional
 
 # 3rd Party
 import numpy as np
@@ -22,13 +23,18 @@ class GRFSampler(__Sampler__):
         self,
         average:NDArray,
         cov_mat:NDArray,
-        boundary_conditions:BoundaryConditions
+        boundary_conditions:Optional[BoundaryConditions],
+        seed:Optional[int]=None
     ):
+
+        # If desired, fix the random seed
+        if seed is not None:
+            np.random.seed(seed)
 
         self.average = average
         self.cov_mat = cov_mat
         self.boundary_conditions = boundary_conditions
-        self.fixed_indices:NDArray = boundary_conditions.indices
+        self.fixed_indices:NDArray = [] if boundary_conditions is None else boundary_conditions.indices
         self.free_indices:NDArray = np.setdiff1d(
             np.arange(average.size),
             self.fixed_indices
@@ -68,11 +74,15 @@ class GRFSampler(__Sampler__):
         self.L_cond = np.linalg.cholesky(self.Gamma_cond)
 
 
-    def __call__(self, num_samples:int) -> np.ndarray:
+    def __call__(self, num_samples:int, std_normal_sample:NDArray = None) -> np.ndarray:
         """Retrieves num_samples samples"""
 
-        z = np.random.standard_normal((num_samples, self.free_indices.size))
-        v = (self.L_cond.T @ z.T).T
+        if std_normal_sample is None:
+            std_normal_sample = np.random.standard_normal((num_samples, self.free_indices.size))
+        else:
+            num_samples = std_normal_sample.shape[0]
+
+        v = (self.L_cond @ std_normal_sample.T).T
 
         out_samples = np.empty((num_samples, self.average.size))
         out_samples[:, self.free_indices] = self.mu_cond + v

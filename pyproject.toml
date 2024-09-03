@@ -1,5 +1,5 @@
 [project]
-name = "sampler"
+name = "bspline-sampler"
 dynamic = ["version"]
 description = "A simple tool for sampling B-spline coefficients distributed as Gaussian Random Fields, subject to constraints."
 readme = "README.md"
@@ -53,9 +53,6 @@ path = "src/sampler/__about__.py"
 [tool.hatch.build.targets.wheel]
 packages = [
     "src/sampler",
-    "src/sampler/boundary_conditions",
-    "src/sampler/utils",
-    "src/sampler/sampler_base",
 ]
 
 

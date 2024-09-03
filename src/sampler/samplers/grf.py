@@ -8,15 +8,13 @@ import scipy as sp
 
 # Local
 from sampler.boundary_conditions.base import BoundaryConditions
-from sampler.sampler_base.base import __Sampler__
+from sampler.samplers.base import __Sampler__
 from sampler.utils.type_aliases import (
     NDArray
 )
 
 class GRFSampler(__Sampler__):
-    """Gaussian Random Field Sampler
-    
-    """
+    """Gaussian Random Field Sampler"""
 
 
     def __init__(

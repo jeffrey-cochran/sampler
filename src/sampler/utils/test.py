@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 from tabulate import tabulate
 from hypothesis.strategies import integers
-from sampler.sampler_base import __Sampler__
+from sampler.samplers.base import __Sampler__
 from sampler.utils.type_aliases import (
     NDArray,
     SparseMatrix

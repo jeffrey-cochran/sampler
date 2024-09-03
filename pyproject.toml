@@ -41,7 +41,9 @@ test = [
     "tabulate",
 ]
 dev = [
-    "sampler[test]",
+    "pytest",
+    "hypothesis",
+    "tabulate",
     "black",
 ]
 
@@ -53,16 +55,21 @@ path = "src/sampler/__about__.py"
 [tool.hatch.build.targets.wheel]
 packages = [
     "src/sampler",
-]
-
-
-[tool.hatch.envs.dev]
-features = [
-    "dev"
+    "src/sampler/samplers",
+    "src/sampler/utils",
+    "src/sampler/boundar_conditions",
 ]
 
 
 [tool.hatch.envs.test]
+template = "default"
 features = [
     "test"
+]
+
+
+[tool.hatch.envs.dev]
+template = "default"
+features = [
+    "dev"
 ]

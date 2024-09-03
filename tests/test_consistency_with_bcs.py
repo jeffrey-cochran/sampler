@@ -18,7 +18,7 @@ from sampler.utils.type_aliases import (
     NDArray,
     SparseMatrix
 )
-from sampler.sampler_base import(
+from sampler.samplers import(
     GMRFSampler,
     GRFSampler
 )

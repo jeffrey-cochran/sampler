@@ -4,9 +4,11 @@
 # 3rd Party
 import numpy as np
 import scipy as sp
+import matplotlib.tri as tri
+import matplotlib.pyplot as plt
 
 # Local
-from sampler.unit_square import UnitSquareSampler
+from sampler.samplers.unit_square import UnitSquareSampler
 from sampler.boundary_conditions.base import NeumannBC, DirichletBC
 from sampler.utils.kernels import whittle_matern_precision, whittle_matern_covariance
 
@@ -93,3 +95,50 @@ ten_thousand_samples = tmp_sampler.sample(10000)
 tmp_sampler.visualize_sample(title="Random Sample")
 tmp_sampler.visualize_sample(ten_thousand_samples[777], title="Sample 777")
 tmp_sampler.visualize_sample(ten_thousand_samples[777], degree=30, title="Sample 777 (Refined)")
+
+# Underneath, the sampler is using `nutils` for all of its
+# b-spline computation, and it stores this information if
+# you want to use it. For example, here's the commented
+# `visualize_sample` code:
+degree = 9
+sample = ten_thousand_samples[777]
+title = "Commented `visualize_sample` Code"
+
+# Create nutils sampler for visualization
+viz_sampler = tmp_sampler.topo.sample('bezier', degree)
+
+# Create nutils function for visualization using
+# the tmp_sampler basis with the sampled coefficients
+tmp_sampler.namespace.f = np.dot(tmp_sampler.namespace.basis, sample)
+
+# Evaluate the function at the nutils sampler points
+x, f = viz_sampler.eval(['xy_i', 'f'] @ tmp_sampler.namespace)
+
+# Normalize function values for visualization
+f /= (1.1*np.abs(f).max())
+
+# Create the triangulation for visualization
+triangulation = tri.Triangulation(x[:,0], x[:,1], viz_sampler.tri)
+
+# Create figure and subplots
+fig = plt.figure()
+ax1 = fig.add_subplot(111)
+
+# Create level sets for visualization
+levels = np.arange(-1., 1., 0.05)
+
+# Plot the contours
+ax1.set_title(title, fontsize=40)
+ax1.triplot(triangulation, lw=0.5, color='white')
+contour = ax1.tricontourf(triangulation, f.flatten(), levels=levels, cmap='bwr')
+
+# Add a colorbar
+fig.subplots_adjust(right=0.8)
+cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
+fig.colorbar(contour, cax=cbar_ax)
+
+# Resize to full-screen
+mng = plt.get_current_fig_manager()
+mng.resize(*mng.window.maxsize())
+
+plt.show()

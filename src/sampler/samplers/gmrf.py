@@ -13,13 +13,11 @@ from sampler.utils.type_aliases import (
     NDArray,
     SparseMatrix
 )
-from sampler.sampler_base import __Sampler__
+from sampler.samplers.base import __Sampler__
 
 
 class GMRFSampler(__Sampler__):
-    """Gaussian Markov Random Field Sampler
-    
-    """
+    """Gaussian Markov Random Field Sampler"""
 
 
     def __init__(

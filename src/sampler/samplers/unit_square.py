@@ -19,12 +19,12 @@ from sampler.boundary_conditions.base import (
     DirichletBC
 )
 from sampler.boundary_conditions.unit_square import UnitSquareBoundaryConditions
-from sampler.sampler_base import (
+from sampler.samplers.base import (
     __Sampler__,
     Sampler,
-    GMRFSampler,
-    GRFSampler
 )
+from sampler.samplers.gmrf import GMRFSampler
+from sampler.samplers.grf import GRFSampler
 from sampler.utils.type_aliases import (
     NDArray,
     SparseMatrix,
@@ -92,9 +92,9 @@ class UnitSquareSampler(Sampler):
         self.average = average.flatten()
         self.mat, self.is_gmrf = self.__init_mat(cov_mat=cov_mat, prec_mat=prec_mat)
 
-        self.ns = nutils_function.Namespace()
-        self.topo, self.ns.xy = self.__init_geom(poly_order=poly_order)
-        self.ns.basis = self.__init_basis(topo=self.topo, poly_order=poly_order)
+        self.namespace = nutils_function.Namespace()
+        self.topo, self.namespace.xy = self.__init_geom(poly_order=poly_order)
+        self.namespace.basis = self.__init_basis(topo=self.topo, poly_order=poly_order)
 
         self.boundary_conditions = self.__init_boundary_conditions(
             bc_top=bc_top,
@@ -278,9 +278,9 @@ class UnitSquareSampler(Sampler):
         viz_sampler = self.topo.sample('bezier', degree)
 
         sample = sample if sample is not None else self.sample(1).flatten()
-        self.ns.f = np.dot(self.ns.basis, sample)
+        self.namespace.f = np.dot(self.namespace.basis, sample)
 
-        x, f = viz_sampler.eval(['xy_i', 'f'] @ self.ns)
+        x, f = viz_sampler.eval(['xy_i', 'f'] @ self.namespace)
 
         f /= (1.1*np.abs(f).max())
 

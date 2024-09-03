@@ -1,0 +1,71 @@
+[project]
+name = "sampler"
+dynamic = ["version"]
+description = "A simple tool for sampling B-spline coefficients distributed as Gaussian Random Fields, subject to constraints."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Jeffrey Cochran", email = "jeffrey.david.cochran@gmail.com"},
+]
+keywords = ["sampler", "bspline", "gaussian", "random", "field", "sampling", "constraints"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+]
+dependencies = [
+    "numpy~=1.26.4",
+    "scipy~=1.13.1",
+    "matplotlib",
+    "nutils~=8.8",
+    "nutils-poly~=1.0.1"
+]
+
+
+[project.urls]
+Homepage = "https://github.com/jeffrey-cochran/sampler"
+Issues = "https://github.com/jeffrey-cochran/sampler/issues"
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "hypothesis",
+    "tabulate",
+]
+dev = [
+    "sampler[test]",
+    "black",
+]
+
+
+[tool.hatch.version]
+path = "src/sampler/__about__.py"
+
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/sampler",
+    "src/sampler/boundary_conditions",
+    "src/sampler/utils",
+    "src/sampler/sampler_base",
+]
+
+
+[tool.hatch.envs.dev]
+features = [
+    "dev"
+]
+
+
+[tool.hatch.envs.test]
+features = [
+    "test"
+]

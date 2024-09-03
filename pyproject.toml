@@ -3,7 +3,7 @@ name = "bspline-sampler"
 dynamic = ["version"]
 description = "A simple tool for sampling B-spline coefficients distributed as Gaussian Random Fields, subject to constraints."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 license = "MIT"
 authors = [
     { name = "Jeffrey Cochran", email = "jeffrey.david.cochran@gmail.com"},
@@ -14,6 +14,8 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.8",
 ]
 dependencies = [
     "numpy~=1.26.4",

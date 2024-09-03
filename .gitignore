@@ -2,3 +2,4 @@ __pycahe__/*
 **/**.pyc
 **/**.jpg
 **/**.png
+.env

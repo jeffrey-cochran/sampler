@@ -22,8 +22,12 @@ class GRFSampler(__Sampler__):
         average:NDArray,
         cov_mat:NDArray,
         boundary_conditions:Optional[BoundaryConditions],
-        seed:Optional[int]=None
+        seed:Optional[int]=None,
+        linear_constraints:Optional[BoundaryConditions]=None
     ):
+
+        # TODO: Add support for linear constraints
+        _ = linear_constraints
 
         # If desired, fix the random seed
         if seed is not None:

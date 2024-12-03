@@ -210,15 +210,11 @@ class BSpline(nn.Module):
 
     @staticmethod
     def _bspline_get_derivatives(knots, degree, k, x, W):
-
         nf = knots.numel() - degree - 1
-
         if k == 0:
             return BSpline._bspline_get_values(knots, degree, x) @ W
-
         elif k > degree:
             return torch.zeros((x.numel(), nf), device=x.device)
-
         else:
             # The derivatives of a degree-p B-spline basis can be expressed as linear combinations of degree (p-1) B-spline basis functions.
             # To evaluate the lower-order functions, I also remove the first and last knot, since the lower degree also expects lower multiplicities of the start and end knot.
@@ -233,18 +229,13 @@ class BSpline(nn.Module):
 
     @staticmethod
     def _bspline_get_derivative_weights(knots, degree, k, W):
-
         nf = knots.numel() - degree - 1
-
         if W is None:
             W = torch.diag(torch.ones(nf, device=knots.device, dtype=knots.dtype))
-
         if k == 0:
             return (degree, W)
-
         elif k > degree:
             return (degree, torch.zeros_like(W))
-
         else:
             eps = torch.tensor(1e-10, dtype=knots.dtype, device=knots.device)
             a1 = knots[:, 1:nf]

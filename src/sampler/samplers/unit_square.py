@@ -298,8 +298,8 @@ class UnitSquareSampler(Sampler):
         fig.subplots_adjust(right=0.8)
         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
         fig.colorbar(contour, cax=cbar_ax)
-        
-        mng = plt.get_current_fig_manager()
-        mng.resize(*mng.window.maxsize())
+
+        # mng = plt.get_current_fig_manager()
+        # mng.resize(*mng.window.maxsize())
 
         plt.show()

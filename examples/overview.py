@@ -2,8 +2,11 @@
 # N/A
 
 # 3rd Party
+
 import numpy as np
 import scipy as sp
+import matplotlib
+matplotlib.use("QtAgg")
 import matplotlib.tri as tri
 import matplotlib.pyplot as plt
 
@@ -138,7 +141,7 @@ cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
 fig.colorbar(contour, cax=cbar_ax)
 
 # Resize to full-screen
-mng = plt.get_current_fig_manager()
-mng.resize(*mng.window.maxsize())
+# mng = plt.get_current_fig_manager()
+# mng.resize(*mng.window.maxsize())
 
 plt.show()

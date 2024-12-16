@@ -99,7 +99,13 @@ class BSpline(nn.Module):
         dtype:torch.dtype=torch.float32
     ) -> BSpline:
         return BSpline(
-            lims, n_segments, degree, log_widths=torch.zeros((n_segments,), dtype=dtype)
+            lims=lims,
+            n_segments=n_segments,
+            degree=degree,
+            log_widths=torch.zeros(
+                (n_segments,),
+                dtype=dtype
+            )
         )
 
 

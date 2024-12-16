@@ -52,12 +52,17 @@ class Functions(nn.Module):
             # Instead, we evaluate the components, and then do tensor product + linear combinations in one step
             f_x = self.basis.f_x
             f_y = self.basis.f_y if self.basis.f_y is not None else f_x
+
             p_x = points.xs
             p_y = points.ys if points.ys is not None else p_x
+            
             W = weights.reshape(len(f_x), len(f_y), -1)
+            
             fxs = f_x(p_x)
             fys = fxs if f_y is f_x and p_y is p_x else f_y(p_y)
+
             output = torch.einsum("xf,fgF,yg->xyF", fxs, W, fys)
+            
             if points.x_varies_first:
                 output = output.permute(1, 0, 2)
             output = output.reshape(-1, output.shape[2])

@@ -272,8 +272,18 @@ class UnitSquareSampler(Sampler):
 
         return boundary_condition
 
+    @staticmethod
+    def visualize_sample(
+        
+    )
 
-    def visualize_sample(self, sample:NDArray=None, degree=9, title='Func Value') -> None:
+
+    def visualize_sample(
+        self,
+        sample:NDArray=None,
+        degree=9,
+        title='Func Value',
+        ) -> None:
 
         viz_sampler = self.topo.sample('bezier', degree)
 

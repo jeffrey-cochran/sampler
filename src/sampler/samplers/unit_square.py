@@ -274,11 +274,6 @@ class UnitSquareSampler(Sampler):
 
     @staticmethod
     def visualize_sample(
-        
-    )
-
-
-    def visualize_sample(
         self,
         sample:NDArray=None,
         degree=9,

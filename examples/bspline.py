@@ -96,6 +96,9 @@ xy_grid = tensor_grid.TensorGrid(
 weights = tmp_sampler.sample(1)
 weights = torch.Tensor(weights.transpose()).to(torch.float64)
 
+print(type(tmp_sampler))
+tmp_sampler.visualize_sample(weights.numpy())
+
 # weights = torch.randn(169,1, dtype=torch.float64)
 
 # print(weights.size())
@@ -103,4 +106,23 @@ weights = torch.Tensor(weights.transpose()).to(torch.float64)
 # # TODO: confirm the orderign of the weights
 f = functions.Functions(xy_basis, weights)
 
-f(xy_grid)
+output = f(xy_grid)
+output /= (1.1*np.abs(output).max())
+output = output.reshape((100,100))
+output = np.rot90(output, k=1, axes=(0,1))
+
+import matplotlib as mpl
+from matplotlib import pyplot
+import numpy as np
+
+# tell imshow about color map so that only set colors are used
+img = pyplot.imshow(
+    output,
+    interpolation='nearest',
+    cmap='bwr'
+)
+
+# make a color bar
+pyplot.colorbar(img, cmap='bwr', norm=mpl.colors.Normalize(vmin=-1.0, vmax=1.0))
+
+pyplot.show()

@@ -272,7 +272,7 @@ class UnitSquareSampler(Sampler):
 
         return boundary_condition
 
-    @staticmethod
+    # @staticmethod
     def visualize_sample(
         self,
         sample:NDArray=None,

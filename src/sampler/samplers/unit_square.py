@@ -9,6 +9,7 @@ from typing import Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import torch_bspline as tb
 from nutils import mesh as nutils_mesh
 
 # Local
@@ -24,10 +25,6 @@ from sampler.samplers.base import (
 )
 from sampler.samplers.gmrf import GMRFSampler
 from sampler.samplers.grf import GRFSampler
-from sampler.utils.bsplines.bspline import BSpline
-from sampler.utils.bsplines.functions import Functions as BsplineFunctions
-from sampler.utils.bsplines.tensor_basis import TensorBasis
-from sampler.utils.bsplines.tensor_grid import TensorGrid
 from sampler.utils.dtype_map import numpy_to_torch_dtype_dict
 from sampler.utils.type_aliases import (
     NDArray,
@@ -184,21 +181,21 @@ class UnitSquareSampler(Sampler):
         y_dim:int,
         poly_order:int,
         dtype:np.dtype
-    ) -> TensorBasis:
+    ) -> tb.TensorBasis:
 
-        x_basis = BSpline.uniform(
+        x_basis = tb.BSpline.uniform(
             lims=(0,1),
             n_segments=x_dim - poly_order,
             degree=poly_order,
             dtype = numpy_to_torch_dtype_dict[dtype]
         )
-        y_basis = BSpline.uniform(
+        y_basis = tb.BSpline.uniform(
             lims=(0,1),
             n_segments=y_dim - poly_order,
             degree=poly_order,
             dtype = numpy_to_torch_dtype_dict[dtype]
         )
-        xy_basis = TensorBasis(x_basis, y_basis)
+        xy_basis = tb.TensorBasis(x_basis, y_basis)
 
         return x_basis, y_basis, xy_basis
 
@@ -302,14 +299,14 @@ class UnitSquareSampler(Sampler):
 
         weights = (sample if sample is not None else self.sample(1)).flatten()
 
-        xy_grid = TensorGrid(
+        xy_grid = tb.TensorGrid(
             xs = torch.linspace(0,1,num_x),
             ys = torch.linspace(0,1,num_y),
             x_varies_first=True
         )
         X, Y  = np.meshgrid(xy_grid.xs.numpy(), xy_grid.ys.numpy())
 
-        f = BsplineFunctions(self.xy_basis, torch.tensor(weights))
+        f = tb.BSplineFunctions(self.xy_basis, torch.tensor(weights))
         Z = f(xy_grid).reshape(X.shape)
 
         fig = plt.figure()

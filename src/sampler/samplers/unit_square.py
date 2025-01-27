@@ -6,11 +6,11 @@ from functools import reduce
 from typing import Tuple, Union
 
 # 3rd Party
-import numpy as np
-from nutils import function as nutils_function
-from nutils import mesh as nutils_mesh
-import matplotlib.tri as tri
 import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch_bspline as tb
+from nutils import mesh as nutils_mesh
 
 # Local
 from sampler.boundary_conditions.base import (
@@ -25,6 +25,7 @@ from sampler.samplers.base import (
 )
 from sampler.samplers.gmrf import GMRFSampler
 from sampler.samplers.grf import GRFSampler
+from sampler.utils.dtype_map import numpy_to_torch_dtype_dict
 from sampler.utils.type_aliases import (
     NDArray,
     SparseMatrix,
@@ -46,6 +47,7 @@ class UnitSquareSampler(Sampler):
         bc_bot:BoundaryCondition = None,
         bc_left:BoundaryCondition = None,
         bc_right:BoundaryCondition = None,
+        dtype:np.dtype = np.float64,
         rtol:float = 1.e-5
     ):
         """Initialize UnitSquareSampler
@@ -92,9 +94,12 @@ class UnitSquareSampler(Sampler):
         self.average = average.flatten()
         self.mat, self.is_gmrf = self.__init_mat(cov_mat=cov_mat, prec_mat=prec_mat)
 
-        self.namespace = nutils_function.Namespace()
-        self.topo, self.namespace.xy = self.__init_geom(poly_order=poly_order)
-        self.namespace.basis = self.__init_basis(topo=self.topo, poly_order=poly_order)
+        self.x_basis, self.y_basis, self.xy_basis = self.__init_basis(
+            x_dim=self.x_dim,
+            y_dim=self.y_dim,
+            poly_order=poly_order,
+            dtype=dtype
+        )
 
         self.boundary_conditions = self.__init_boundary_conditions(
             bc_top=bc_top,
@@ -144,9 +149,9 @@ class UnitSquareSampler(Sampler):
         # Create temporary topology, geometry, and basis for projecting the
         # boundary conditions. This is only done for convenience.
         x_topo, x_geom = nutils_mesh.rectilinear([np.linspace(0, 1, self.x_dim-poly_order+1)])
-        y_topo, y_geom = nutils_mesh.rectilinear([np.linspace(0, 1, self.y_dim-poly_order+1)])
-        #
         x_basis = x_topo.basis('spline', degree=poly_order)
+        #
+        y_topo, y_geom = nutils_mesh.rectilinear([np.linspace(0, 1, self.y_dim-poly_order+1)])
         y_basis = y_topo.basis('spline', degree=poly_order)
 
         # Capturing the projection solver output because I don't see
@@ -170,28 +175,36 @@ class UnitSquareSampler(Sampler):
         return out_bcs
 
 
-    def __init_basis(self, topo:NutilsTopology, poly_order:int) -> NutilsFunctionArray:
-        return topo.basis('spline', degree=poly_order)
-    
-    
+    def __init_basis(
+        self, *,
+        x_dim:int,
+        y_dim:int,
+        poly_order:int,
+        dtype:np.dtype
+    ) -> tb.TensorBasis:
+
+        x_basis = tb.BSpline.uniform(
+            lims=(0,1),
+            n_segments=x_dim - poly_order,
+            degree=poly_order,
+            dtype = numpy_to_torch_dtype_dict[dtype]
+        )
+        y_basis = tb.BSpline.uniform(
+            lims=(0,1),
+            n_segments=y_dim - poly_order,
+            degree=poly_order,
+            dtype = numpy_to_torch_dtype_dict[dtype]
+        )
+        xy_basis = tb.TensorBasis(x_basis, y_basis)
+
+        return x_basis, y_basis, xy_basis
+
+
     def __init_dims(self, average_coeffs:NDArray) -> Tuple[int,int]:
         if len(average_coeffs.shape) != 2:
             raise RuntimeError("The array of average coefficients must be 2D. Aborting!")
 
         return average_coeffs.shape
-
-
-    def __init_geom(self, poly_order:int) -> Tuple[NutilsTopology, NutilsFunctionArray]:
-        # NOTE:
-        #   The average values of the coefficients are provided; however, the
-        #   number of knots must be inferred dynamically based on this and the
-        #   degree of the spline basis.
-        return nutils_mesh.rectilinear(
-            [
-                np.linspace(0, 1, self.x_dim-poly_order+1),
-                np.linspace(0, 1, self.y_dim-poly_order+1)
-            ]
-        )
 
 
     def __init_mat(self, cov_mat:NDArray, prec_mat:SparseMatrix) -> Tuple[Union[NDArray, SparseMatrix], bool]:
@@ -273,33 +286,39 @@ class UnitSquareSampler(Sampler):
         return boundary_condition
 
 
-    def visualize_sample(self, sample:NDArray=None, degree=9, title='Func Value') -> None:
+    def visualize_sample(
+        self, *,
+        cmap:str='bwr',
+        fontsize:int=40,
+        num_x:int=100,
+        num_y:int=101,
+        num_contour_levels:int=15,
+        sample:NDArray=None,
+        title='Func Value',
+        ) -> None:
 
-        viz_sampler = self.topo.sample('bezier', degree)
+        weights = (sample if sample is not None else self.sample(1)).flatten()
 
-        sample = sample if sample is not None else self.sample(1).flatten()
-        self.namespace.f = np.dot(self.namespace.basis, sample)
+        xy_grid = tb.TensorGrid(
+            xs = torch.linspace(0,1,num_x),
+            ys = torch.linspace(0,1,num_y),
+            x_varies_first=True
+        )
+        X, Y  = np.meshgrid(xy_grid.xs.numpy(), xy_grid.ys.numpy())
 
-        x, f = viz_sampler.eval(['xy_i', 'f'] @ self.namespace)
-
-        f /= (1.1*np.abs(f).max())
-
-        triangulation = tri.Triangulation(x[:,0], x[:,1], viz_sampler.tri)
+        f = tb.BSplineFunctions(self.xy_basis, torch.tensor(weights))
+        Z = f(xy_grid).reshape(X.shape)
 
         fig = plt.figure()
-        ax1 = fig.add_subplot(111)
+        ax = fig.add_subplot(111)
 
-        levels = np.arange(-1., 1., 0.05)
+        cs = ax.contourf(X, Y, Z, levels=num_contour_levels, cmap=cmap)
 
-        ax1.set_title(title, fontsize=40)
-        ax1.triplot(triangulation, lw=0.5, color='white')
-        contour = ax1.tricontourf(triangulation, f.flatten(), levels=levels, cmap='bwr')
-
+        ax.set_title(title, fontsize=fontsize)
         fig.subplots_adjust(right=0.8)
         cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
-        fig.colorbar(contour, cax=cbar_ax)
-        
-        mng = plt.get_current_fig_manager()
-        mng.resize(*mng.window.maxsize())
+        fig.colorbar(cs, cax=cbar_ax)
 
         plt.show()
+
+        return xy_grid

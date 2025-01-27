@@ -200,7 +200,7 @@ class BSpline(nn.Module):
             dim=1,
         ).to(x.dtype)
 
-        eps = torch.tensor(1e-10, dtype=x.dtype, device=x.device)
+        eps = torch.tensor(1e-16, dtype=x.dtype, device=x.device)
 
         for deg in range(1, degree + 1):
             nf = knots.numel() - deg - 1

@@ -20,8 +20,8 @@ from sampler.utils.kernels import whittle_matern_precision, whittle_matern_covar
 #     or a covariance matrix (`cov_mat=...`), but not both
 #   - The `whittle_matern_covariance` function assumes a smoothness parameter of 2.5
 #     (this isn't arbitrary, but a special case for which the kernel is simple)
-num_bases_x = 13
-num_bases_y = 13
+num_bases_x = 15
+num_bases_y = 15
 average = np.zeros((num_bases_x, num_bases_y))
 cov = whittle_matern_covariance(num_bases_x, 0.3)
 
@@ -71,58 +71,13 @@ tmp_sampler = UnitSquareSampler(
     average=average,
     cov_mat=cov,
     #prec_mat=prec,
-    poly_order=4,
-    bc_top=DirichletBC(func=constant(0.)),
-    bc_bot=DirichletBC(func=constant(0.)),
-    bc_left=None,
+    poly_order=3,
+    bc_top=DirichletBC(func=linear(in_slope=1., in_intercept=0.)),
+    bc_bot=None,
+    bc_left=DirichletBC(func=linear(in_slope=-1., in_intercept=1.)),
     bc_right=None,
 )
 
-#
-# Now confirm that the weights are being interpreted correctly
-x_basis = bspline.BSpline.uniform(
-    lims=(0,1),
-    n_segments=10,
-    degree=3,
-    dtype = torch.float64
-)
-
-xy_basis = tensor_basis.TensorBasis(x_basis, x_basis)
-
-xy_grid = tensor_grid.TensorGrid(
-    xs = torch.linspace(0,1,100)
-)
-
 weights = tmp_sampler.sample(1)
-weights = torch.Tensor(weights.transpose()).to(torch.float64)
 
-print(type(tmp_sampler))
-tmp_sampler.visualize_sample(weights.numpy())
-
-# weights = torch.randn(169,1, dtype=torch.float64)
-
-# print(weights.size())
-
-# # TODO: confirm the orderign of the weights
-f = functions.Functions(xy_basis, weights)
-
-output = f(xy_grid)
-output /= (1.1*np.abs(output).max())
-output = output.reshape((100,100))
-output = np.rot90(output, k=1, axes=(0,1))
-
-import matplotlib as mpl
-from matplotlib import pyplot
-import numpy as np
-
-# tell imshow about color map so that only set colors are used
-img = pyplot.imshow(
-    output,
-    interpolation='nearest',
-    cmap='bwr'
-)
-
-# make a color bar
-pyplot.colorbar(img, cmap='bwr', norm=mpl.colors.Normalize(vmin=-1.0, vmax=1.0))
-
-pyplot.show()
+xy_grid= tmp_sampler.visualize_sample(sample=weights)

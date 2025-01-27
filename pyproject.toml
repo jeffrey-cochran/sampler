@@ -21,7 +21,8 @@ dependencies = [
     "scipy~=1.13.1",
     "matplotlib",
     "nutils~=8.8",
-    "nutils-poly~=1.0.1"
+    "nutils-poly~=1.0.1",
+    "torch-bspline~=0.1.0"
 ]
 
 
@@ -40,11 +41,13 @@ test = [
     "pytest",
     "hypothesis",
     "tabulate",
+    "PyQt6",
 ]
 dev = [
     "pytest",
     "hypothesis",
     "tabulate",
+    "PyQt6",
     "black",
 ]
 
@@ -58,7 +61,7 @@ packages = [
     "src/sampler",
     "src/sampler/samplers",
     "src/sampler/utils",
-    "src/sampler/boundar_conditions",
+    "src/sampler/boundary_conditions",
 ]
 
 

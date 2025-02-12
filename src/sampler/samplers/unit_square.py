@@ -85,6 +85,8 @@ class UnitSquareSampler(Sampler):
             at the corners.
         """
 
+        self.dtype = dtype
+
         self.poly_order = poly_order
 
         # NOTE: 
@@ -299,9 +301,11 @@ class UnitSquareSampler(Sampler):
 
         weights = (sample if sample is not None else self.sample(1)).flatten()
 
+        _dtype = numpy_to_torch_dtype_dict[self.dtype]
+
         xy_grid = tb.TensorGrid(
-            xs = torch.linspace(0,1,num_x),
-            ys = torch.linspace(0,1,num_y),
+            xs = torch.linspace(0,1,num_x, dtype=_dtype),
+            ys = torch.linspace(0,1,num_y, dtype=_dtype),
             x_varies_first=True
         )
         X, Y  = np.meshgrid(xy_grid.xs.numpy(), xy_grid.ys.numpy())

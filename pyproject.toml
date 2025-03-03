@@ -17,11 +17,11 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
 ]
 dependencies = [
-    "numpy~=1.26.4",
+    "numpy >=1.17,<3",
     "scipy~=1.13.1",
     "matplotlib",
     "nutils~=8.8",
-    "nutils-poly~=1.0.1",
+    "nutils-poly >=1,<2",
     "torch-bspline~=0.1.3"
 ]
 
